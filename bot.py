@@ -32,21 +32,17 @@ async def check_mal_url(message):
         if response.status_code == 200:
             # Get the text content
             txt_data = response.text
-            print(f"Loaded {len(txt_data)} characters from malicious links file")
 
             # Split into lines and clean them
             lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
-            print(f"Found {len(lines)} non-empty lines in malicious links file")
 
             # Debug: print first few lines
-            if lines:
-                print(f"First few malicious links: {lines[:3]}")
 
             # Check if any line is contained in the message (case-insensitive)
             message_lower = message.content.lower()
             for line in lines:
                 if line.lower() in message_lower:
-                    print(f"Malicious link detected: {line} in message: {message.content}")
+
                     try:
                         await message.reply("⚠️ Message was flagged for containing a malicious link.")
                         await message.delete()
@@ -77,7 +73,6 @@ async def check_mal_url_ending(message):
             # Split into lines and clean them
             lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
 
-            print(f"Checking {len(lines)} trailing slash patterns")
 
             # Check if any line is contained in the message (case-insensitive)
             message_lower = message.content.lower()
@@ -111,8 +106,7 @@ async def check_mal_term(message):
             # Split into lines and clean them
             lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
 
-            print(f"Message content: '{message.content}'")
-            print(f"Checking against {len(lines)} malicious phrases")
+
 
             # Check if any phrase is contained in the message (case-insensitive)
             message_lower = message.content.lower()
@@ -127,7 +121,7 @@ async def check_mal_term(message):
                         pass
                     return  # Exit after first match
 
-            print("No malicious phrase matches found")
+            print("")
         else:
             print("Failed to fetch the file:", response.status_code)
     except Exception as e:
@@ -172,7 +166,6 @@ try:
         if row and len(row) > 1 and not row[0].startswith("#"):
             malicious_urls.add(row[1].strip())
 
-    print(f"Loaded {len(malicious_urls)} malicious URLs from URLhaus")
 except Exception as e:
     print(f"Failed to load malicious URLs: {e}")
     malicious_urls = set()
