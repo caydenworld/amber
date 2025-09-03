@@ -32,7 +32,7 @@ async def check_mal_url(message):
         lines = txt_data.split("\n")
 
         # Check if the string exists in any line
-        if any(message.content in line for line in lines):
+        if any(line in message.content for line in lines):
             await message.reply("⚠️ Message was flagged for containing a malicious link.")
             await message.delete()
             settings_df = pd.read_csv("settings.csv")
@@ -68,7 +68,7 @@ async def check_mal_url_ending(message):
         lines = txt_data.split("\n")
 
         # Check if the string exists in any line
-        if any(message.content in line for line in lines):
+        if any(line in message.content for line in lines):
             await message.reply("⚠️ Message was flagged for containing a malicious link ending. Be careful when visiting this site.")
 
     else:
@@ -89,7 +89,7 @@ async def check_mal_term(message):
         lines = txt_data.split("\n")
 
         # Check if the string exists in any line
-        if any(message.content in line for line in lines):
+        if any(line in message.content for line in lines):
             await message.reply(
                 f"⚠️ Message was flagged for containing a malicious term. Be careful when communicating with {message.author}")
 
@@ -119,7 +119,7 @@ def extract_urls(text):
 
 # Step 3: Check if any URL in the message is malicious
 def message_contains_malicious_url(message):
-    urls_in_message = extract_urls(message)
+    urls_in_message = extract_urls(message.content)
     for url in urls_in_message:
         if url in malicious_urls:
             return True, url
