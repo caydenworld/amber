@@ -14,7 +14,12 @@ import os
 import requests
 
 dotenv.load_dotenv()
-bot = discord.Bot()
+
+# Enable necessary intents
+intents = discord.Intents.default()
+intents.message_content = True  # This is required to read message content
+
+bot = discord.Bot(intents=intents)
 
 
 async def check_mal_url(message):
@@ -23,25 +28,35 @@ async def check_mal_url(message):
         url = "https://raw.githubusercontent.com/DevSpen/scam-links/master/src/links.txt"
 
         # Fetch the file from GitHub
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             # Get the text content
             txt_data = response.text
+            print(f"Loaded {len(txt_data)} characters from malicious links file")
 
-            # Split into lines
-            lines = txt_data.split("\n")
+            # Split into lines and clean them
+            lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
+            print(f"Found {len(lines)} non-empty lines in malicious links file")
 
-            # Check if the string exists in any line
-            if any(line.strip() and line.strip() in message.content for line in lines):
-                try:
-                    await message.reply("⚠️ Message was flagged for containing a malicious link.")
-                    await message.delete()
-                except (discord.NotFound, discord.HTTPException):
-                    # Message was already deleted or doesn't exist
-                    pass
+            # Debug: print first few lines
+            if lines:
+                print(f"First few malicious links: {lines[:3]}")
 
-                # Send to mod channel
-                await send_to_mod_channel(message, "Malicious Link Detected")
+            # Check if any line is contained in the message (case-insensitive)
+            message_lower = message.content.lower()
+            for line in lines:
+                if line.lower() in message_lower:
+                    print(f"Malicious link detected: {line} in message: {message.content}")
+                    try:
+                        await message.reply("⚠️ Message was flagged for containing a malicious link.")
+                        await message.delete()
+                    except (discord.NotFound, discord.HTTPException):
+                        # Message was already deleted or doesn't exist
+                        pass
+
+                    # Send to mod channel
+                    await send_to_mod_channel(message, "Malicious Link Detected")
+                    return  # Exit after first match
         else:
             print("Failed to fetch the file:", response.status_code)
     except Exception as e:
@@ -54,22 +69,28 @@ async def check_mal_url_ending(message):
         url = "https://raw.githubusercontent.com/DevSpen/scam-links/master/src/trailing-slashes.txt"
 
         # Fetch the file from GitHub
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             # Get the text content
             txt_data = response.text
 
-            # Split into lines
-            lines = txt_data.split("\n")
+            # Split into lines and clean them
+            lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
 
-            # Check if the string exists in any line
-            if any(line.strip() and line.strip() in message.content for line in lines):
-                try:
-                    await message.reply(
-                        "⚠️ Message was flagged for containing a malicious link ending. Be careful when visiting this site.")
-                except (discord.NotFound, discord.HTTPException):
-                    # Message was already deleted or doesn't exist
-                    pass
+            print(f"Checking {len(lines)} trailing slash patterns")
+
+            # Check if any line is contained in the message (case-insensitive)
+            message_lower = message.content.lower()
+            for line in lines:
+                if line.lower() in message_lower:
+                    print(f"TRAILING SLASH MATCH: '{line}' in '{message.content}'")
+                    try:
+                        await message.reply(
+                            "⚠️ Message was flagged for containing a malicious link ending. Be careful when visiting this site.")
+                    except (discord.NotFound, discord.HTTPException):
+                        # Message was already deleted or doesn't exist
+                        pass
+                    return  # Exit after first match
         else:
             print("Failed to fetch the file:", response.status_code)
     except Exception as e:
@@ -78,26 +99,35 @@ async def check_mal_url_ending(message):
 
 async def check_mal_term(message):
     try:
-        # The URL of your GitHub-hosted txt file
+        # This file contains phrases like "discord is giving", "catch the nitro"
         url = "https://raw.githubusercontent.com/DevSpen/scam-links/master/src/malicious-terms.txt"
 
         # Fetch the file from GitHub
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             # Get the text content
             txt_data = response.text
 
-            # Split into lines
-            lines = txt_data.split("\n")
+            # Split into lines and clean them
+            lines = [line.strip() for line in txt_data.split("\n") if line.strip()]
 
-            # Check if the string exists in any line
-            if any(line.strip() and line.strip() in message.content for line in lines):
-                try:
-                    await message.reply(
-                        f"⚠️ Message was flagged for containing a malicious term. Be careful when communicating with {message.author}")
-                except (discord.NotFound, discord.HTTPException):
-                    # Message was already deleted or doesn't exist
-                    pass
+            print(f"Message content: '{message.content}'")
+            print(f"Checking against {len(lines)} malicious phrases")
+
+            # Check if any phrase is contained in the message (case-insensitive)
+            message_lower = message.content.lower()
+            for phrase in lines:
+                if phrase.lower() in message_lower:
+                    print(f"MALICIOUS PHRASE MATCH: '{phrase}' in '{message.content}'")
+                    try:
+                        await message.reply(
+                            f"⚠️ Message was flagged for containing a malicious term. Be careful when communicating with {message.author}")
+                    except (discord.NotFound, discord.HTTPException):
+                        # Message was already deleted or doesn't exist
+                        pass
+                    return  # Exit after first match
+
+            print("No malicious phrase matches found")
         else:
             print("Failed to fetch the file:", response.status_code)
     except Exception as e:
