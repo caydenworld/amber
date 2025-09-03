@@ -1,6 +1,7 @@
 # bot.py
 import csv
 import re
+import sys
 from io import StringIO
 
 import discord
@@ -12,7 +13,6 @@ import pandas as pd
 import os
 import requests
 from discord.ui import channel_select
-from scripts.regsetup import description
 
 dotenv.load_dotenv()
 bot = discord.Bot()
@@ -301,6 +301,20 @@ async def setup(ctx: discord.ApplicationContext, channel: discord.TextChannel, r
             # If file doesn't exist, create it with header
             new_row.to_csv(file_path, index=False)
         await ctx.respond("Amber set up! Enjoy a streamlined reporting workflow and spam filters!")
+    elif ctx.guild.id in df["guild"].values:
+        df.loc[df["guild"] == ctx.guild.id, "mod_channel"] == channel.id
+        df.loc[df["guild"] == ctx.guild.id, "mod_role"] == channel.id
+        df.to_csv("settings.csv", index=False)
 
 
-bot.run(dotenv.get_key(key_to_get='DISCORD_TOKEN', dotenv_path='.env'))
+
+try:
+    bot.run(dotenv.get_key(key_to_get='DISCORD_TOKEN', dotenv_path='.env'))
+except bot.exceptions.DiscordException:
+    print("Discord token not found.")
+except KeyError:
+    print("Discord token not found.")
+except bot.exceptions.HTTPException:
+    print("Network error.")
+except Exception:
+    print("Unexpected error:", sys.exc_info()[0])
