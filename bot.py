@@ -12,7 +12,6 @@ import dotenv
 import pandas as pd
 import os
 import requests
-from discord.ui import channel_select
 
 dotenv.load_dotenv()
 bot = discord.Bot()
@@ -202,7 +201,7 @@ async def on_message(message: discord.Message):
     await check_mal_term(message)
 
 
-    if message_contains_malicious_url(str(message)) == True:
+    if message_contains_malicious_url(message)[0]:
         await message.reply("⚠️ Message was flagged for containing a malicious link.")
         await message.delete()
         settings_df = pd.read_csv("settings.csv")
