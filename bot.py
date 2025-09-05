@@ -3,7 +3,7 @@ import csv
 import re
 import sys
 from io import StringIO
-
+from discord.ext import commands
 import discord
 from discord import option
 from datetime import datetime
@@ -337,7 +337,7 @@ async def debug(ctx):
 
         # Embed creation
         embed = discord.Embed(title="Debug", color=discord.Color(0xeeba2b))
-        embed.add_field(name="<:peep:1408020069400969236> Peep Says:", value=" ", inline=False)
+        embed.add_field(name="<:peep:1408020069400969236> Really? You need to know that?", value=" ", inline=False)
         embed.add_field(name="Ping", value=f"{latency}ms", inline=False)
         embed.add_field(name="Integration Type", value="User", inline=False)
         embed.add_field(name="Context", value="Guild", inline=False)
@@ -358,6 +358,7 @@ async def debug(ctx):
 
 
 @bot.command(name="setup", description="Sets up / edits the server settings")
+@commands.has_permissions(administrator=True)
 @option("mod_channel", discord.TextChannel, description="Your Mod Channel")
 @option("mod_role", discord.Role, description="Pick a mod role")
 async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChannel, mod_role: discord.Role):
