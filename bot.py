@@ -337,7 +337,7 @@ async def debug(ctx):
 
         # Embed creation
         embed = discord.Embed(title="Debug", color=discord.Color(0xeeba2b))
-        embed.add_field(name="<:peep:1408020069400969236> Are the squirrels asking you to do this? They are, aren't they?", value=" ", inline=False)
+        embed.add_field(name="<:peep:1408020069400969236> Are the squirrels asking you to do this?", value=" ", inline=False)
         embed.add_field(name="Ping", value=f"{latency}ms", inline=False)
         embed.add_field(name="Integration Type", value="User", inline=False)
         embed.add_field(name="Context", value="Guild", inline=False)
