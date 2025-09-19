@@ -1,0 +1,5 @@
+py-cord
+psutil
+python-dotenv
+pandas
+requests
