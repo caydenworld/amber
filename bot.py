@@ -21,6 +21,7 @@ intents.message_content = True  # This is required to read message content
 
 bot = discord.Bot(intents=intents)
 
+# region moderation
 
 async def check_mal_url(message):
     try:
@@ -228,6 +229,8 @@ class ReportButton(discord.ui.View):
             print(f"Error in report button: {e}")
             await interaction.followup.send("An error occurred while submitting the report.", ephemeral=True)
 
+# endregion
+# region Listeners
 
 @bot.event
 async def on_ready():
@@ -321,6 +324,8 @@ async def on_message(message: discord.Message):
     except Exception as e:
         print(f"Error in on_message: {e}")
 
+# endregion
+# region setup and debug
 
 @bot.command(name="debug", description="Sends a debug report")
 async def debug(ctx):
@@ -390,7 +395,7 @@ async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChanne
             await ctx.respond("Settings updated successfully!")
     except Exception as e:
         await ctx.respond(f"An error occurred during setup: {e}")
-
+# endregion
 
 try:
     token = dotenv.get_key(key_to_get='DISCORD_TOKEN', dotenv_path='.env')
