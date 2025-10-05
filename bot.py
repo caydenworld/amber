@@ -388,6 +388,9 @@ class ReportButton(discord.ui.View):
 
 @bot.event
 async def on_ready():
+    await bot.wait_until_ready()
+    await bot.sync_commands()
+    print(f"✅ Synced slash commands for {bot.user}.")
     print(f"{bot.user} is ready and online!")
 
 
@@ -488,6 +491,12 @@ async def on_message(message: discord.Message):
 
 # endregion
 # region setup and debug
+
+@bot.command(name="version", description="Shows the current version of the bot.")
+async def version(ctx):
+    with open('version.txt', 'r') as file:
+        content = file.read()
+        await ctx.respond(content, ephemeral=True)
 
 @bot.command(name="debug", description="Sends a debug report")
 async def debug(ctx):
