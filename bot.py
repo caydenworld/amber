@@ -6,13 +6,13 @@ from io import StringIO
 from discord.ext import commands
 import discord
 from discord import option
-from datetime import datetime
+from datetime import datetime, timezone
 import psutil
 import dotenv
 import pandas as pd
 import os
 import requests
-
+import random
 dotenv.load_dotenv()
 
 # Enable necessary intents
@@ -22,6 +22,29 @@ intents.message_content = True  # This is required to read message content
 bot = discord.Bot(intents=intents)
 
 # region moderation
+def get_mod_channel_id(guild):
+    # Handle both guild objects and guild IDs
+    guild_id = guild.id if hasattr(guild, 'id') else guild
+
+    with open("settings.csv", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if str(row["guild"]) == str(guild_id):
+                return int(row["mod_channel"])
+    return None
+
+def pick_servers(servers, min_alerts=3, fraction=0.1):
+    n = len(servers)
+    # how many servers to alert: at least `min_alerts`, or ~fraction of total
+    k = max(min_alerts, int(n * fraction))
+
+    # don't pick more servers than exist
+    k = min(k, n)
+
+    # pick k unique servers at random
+    chosen = random.sample(servers, k)
+
+    return chosen
 
 async def check_mal_url(message):
     try:
@@ -192,14 +215,81 @@ def message_contains_malicious_url(message):
         return False, None
 
 
-class ReportButton(discord.ui.View):
-    def __init__(self, reporter, reportee, reason, content):
+class VerifyButton(discord.ui.View):
+    def __init__(self, reporter_id, reportee_id, reason, content_text, guild, report_time):
         super().__init__()
-        # Store values for later use
-        self.reporter = reporter
-        self.reportee = reportee
+        self.reporter_id = str(reporter_id)
+        self.reportee_id = str(reportee_id)
+        self.reason = reason
+        self.content_text = content_text
+        self.guild = guild
+        self.report_time = report_time  # Add timestamp to identify specific report
+
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_button")
+    async def button_callback(self, button: discord.ui.Button, interaction: discord.Interaction):
+        try:
+            button.disabled = True
+            await interaction.response.edit_message(view=self)
+
+            file_path = "reports.csv"
+
+            if not os.path.exists(file_path):
+                await interaction.followup.send("No reports database found.", ephemeral=True)
+                return
+
+            df = pd.read_csv(file_path)
+
+            # Convert columns to string for comparison
+            df["reporter"] = df["reporter"].astype(str)
+            df["reportee"] = df["reportee"].astype(str)
+            df["time"] = df["time"].astype(str)
+
+            # Find the matching report - match by reporter, reportee, AND timestamp to ensure uniqueness
+            mask = (
+                (df["reporter"] == self.reporter_id) &
+                (df["reportee"] == self.reportee_id) &
+                (df["time"] == self.report_time)
+            )
+
+            if mask.any():
+                # Increment 'agreed' count for THIS specific report only
+                df.loc[mask, "agreed"] = df.loc[mask, "agreed"].astype(int) + 1
+            else:
+                # If somehow not found, add it as a new one
+                new_row = {
+                    "reporter": self.reporter_id,
+                    "reportee": self.reportee_id,
+                    "reason": self.reason,
+                    "content": self.content_text,
+                    "time": self.report_time,
+                    "agreed": 1,
+                    "verified": False
+                }
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+            df.to_csv(file_path, index=False)
+
+            await interaction.followup.send(
+                f"✅ Verified! Agreement count updated for report on user ID `{self.reportee_id}`.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            print(f"Error in VerifyButton: {e}")
+            await interaction.followup.send("An error occurred while verifying the report.", ephemeral=True)
+
+class ReportButton(discord.ui.View):
+    def __init__(self, reporter, reportee, reason, content, guild, bot):
+        super().__init__()
+        # Handle both user objects and IDs
+        self.reporter_id = reporter.id if hasattr(reporter, 'id') else reporter
+        self.reporter_name = reporter.name if hasattr(reporter, 'name') else str(reporter)
+        self.reportee_id = reportee.id if hasattr(reportee, 'id') else reportee
+        self.reportee_name = reportee.name if hasattr(reportee, 'name') else str(reportee)
         self.reason = reason
         self.content = content
+        self.guild = guild
+        self.bot = bot
 
     @discord.ui.button(label="Submit to database.", style=discord.ButtonStyle.primary, custom_id="my_button")
     async def button_callback(self, button: discord.ui.Button, interaction: discord.Interaction):
@@ -207,14 +297,43 @@ class ReportButton(discord.ui.View):
             button.disabled = True
             await interaction.response.edit_message(view=self)
 
-            data = {
-                "reporter": self.reporter,
-                "reportee": self.reportee,
-                "reason": self.reason,
-                "content": self.content
-            }
+            content_text = str(self.content)[:500] if self.content else "[No content]"
 
             file_path = "reports.csv"
+
+            # Check if THIS USER has already reported THIS MESSAGE
+            if os.path.exists(file_path):
+                df = pd.read_csv(file_path)
+                df["reporter"] = df["reporter"].astype(str)
+                df["reportee"] = df["reportee"].astype(str)
+                df["content"] = df["content"].astype(str)
+
+                # Check if this specific user already reported this specific content
+                already_reported = (
+                        (df["reporter"] == str(self.reporter_id)) &
+                        (df["reportee"] == str(self.reportee_id)) &
+                        (df["content"] == content_text)
+                )
+
+                if already_reported.any():
+                    await interaction.followup.send(
+                        "You have already reported this message. Thank you for your vigilance!",
+                        ephemeral=True)
+                    return
+
+            # Create timestamp once to use everywhere
+            report_time = datetime.now(timezone.utc).isoformat()
+
+            data = {
+                "reporter": str(self.reporter_id),
+                "reportee": str(self.reportee_id),
+                "reason": self.reason,
+                "content": content_text,
+                "time": report_time,
+                "agreed": 1,
+                "verified": False
+            }
+
             new_row = pd.DataFrame(data, index=[0])
 
             if os.path.exists(file_path):
@@ -225,12 +344,47 @@ class ReportButton(discord.ui.View):
             await interaction.followup.send(
                 "Reported to Amber's database. Thank you for helping make Discord a better place for everyone.",
                 ephemeral=True)
+
+            selected_servers = pick_servers(self.bot.guilds, min_alerts=3, fraction=0.1)
+
+            for server in selected_servers:
+                if not server == self.guild:
+                    mod_channel_id = get_mod_channel_id(server.id)
+
+                    if mod_channel_id:
+                        channel = self.bot.get_channel(mod_channel_id)
+
+                        if channel:
+                            embed = discord.Embed(title=f"{self.guild.name} Submitted a User Report",
+                                                  color=discord.Color(0xeeba2b))
+                            embed.add_field(name="Reported By: ", value=f"{self.reporter_name} ({self.reporter_id})",
+                                            inline=False)
+                            embed.add_field(name="Reported Message: ", value=content_text[:100], inline=False)
+                            embed.add_field(name="User Reported: ", value=f"{self.reportee_name} ({self.reportee_id})",
+                                            inline=False)
+                            embed.add_field(name="Reason: ", value=str(self.reason), inline=False)
+
+                            view = VerifyButton(
+                                self.reporter_id,
+                                self.reportee_id,
+                                self.reason,
+                                content_text,
+                                server,
+                                report_time
+                            )
+
+                            await channel.send(embed=embed, view=view)
+
         except Exception as e:
             print(f"Error in report button: {e}")
+            import traceback
+            traceback.print_exc()
             await interaction.followup.send("An error occurred while submitting the report.", ephemeral=True)
-
 # endregion
 # region Listeners
+
+
+
 
 @bot.event
 async def on_ready():
@@ -266,6 +420,8 @@ async def on_message(message: discord.Message):
         # Ignore the bot's own messages
         if message.author == bot.user:
             return
+
+        # region moderation
 
         # Check for malicious content
         await check_mal_url(message)
@@ -306,7 +462,7 @@ async def on_message(message: discord.Message):
                         embed.add_field(name="Reason: ", value=str(message.content), inline=False)
 
                         view = ReportButton(message.author.id, replied_message.author.id, message.content,
-                                            replied_message.content)
+                                            replied_message.content, message.guild, bot)
 
                         try:
                             await bot.get_channel(int(channel_id)).send(embed=embed, view=view)
@@ -321,6 +477,12 @@ async def on_message(message: discord.Message):
                 await message.reply("The message you're trying to report no longer exists.")
             except Exception as e:
                 print(f"Error in reporting system: {e}")
+        # endregion
+
+        # region XP
+
+        # endregion
+
     except Exception as e:
         print(f"Error in on_message: {e}")
 
@@ -395,6 +557,10 @@ async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChanne
             await ctx.respond("Settings updated successfully!")
     except Exception as e:
         await ctx.respond(f"An error occurred during setup: {e}")
+# endregion
+
+# region Fun
+
 # endregion
 
 try:
