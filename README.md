@@ -7,8 +7,7 @@ Currently in **alpha**, Amber aims to simplify moderation workflows and improve 
 ## Features
 
 - 🚨 **Scam Detection**: Automatically checks messages for known scam URLs.  
-- 📢 **Streamlined Reporting**: Quickly report suspicious activity within your server.  
-- 🔧 **Moderation Tools**: Kick, ban, mute, and manage users efficiently.  
+- 📢 **Streamlined Reporting**: Quickly report suspicious activity within your server.
 - ⚡ **Fast and Lightweight**: Designed for performance and minimal server lag.  
 ## Roadmap
 
