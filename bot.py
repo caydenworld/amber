@@ -17,7 +17,7 @@ dotenv.load_dotenv()
 
 # Enable necessary intents
 intents = discord.Intents.default()
-intents.message_content = True  # This is required to read message content
+intents.message_content = True
 
 bot = discord.Bot(intents=intents)
 
@@ -31,6 +31,18 @@ def get_mod_channel_id(guild):
         for row in reader:
             if str(row["guild"]) == str(guild_id):
                 return int(row["mod_channel"])
+    return None
+
+def get_opt_status(guild):
+    # Handle both guild objects and guild IDs
+    guild_id = guild.id if hasattr(guild, 'id') else guild
+
+    with open("settings.csv", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if str(row["guild"]) == str(guild_id):
+                return str(row["opt"])
+
     return None
 
 def pick_servers(servers, min_alerts=3, fraction=0.1):
@@ -349,31 +361,32 @@ class ReportButton(discord.ui.View):
 
             for server in selected_servers:
                 if not server == self.guild:
-                    mod_channel_id = get_mod_channel_id(server.id)
+                    if get_opt_status(server) != "False":
+                        mod_channel_id = get_mod_channel_id(server.id)
 
-                    if mod_channel_id:
-                        channel = self.bot.get_channel(mod_channel_id)
+                        if mod_channel_id:
+                            channel = self.bot.get_channel(mod_channel_id)
 
-                        if channel:
-                            embed = discord.Embed(title=f"{self.guild.name} Submitted a User Report",
-                                                  color=discord.Color(0xeeba2b))
-                            embed.add_field(name="Reported By: ", value=f"{self.reporter_name} ({self.reporter_id})",
-                                            inline=False)
-                            embed.add_field(name="Reported Message: ", value=content_text[:100], inline=False)
-                            embed.add_field(name="User Reported: ", value=f"{self.reportee_name} ({self.reportee_id})",
-                                            inline=False)
-                            embed.add_field(name="Reason: ", value=str(self.reason), inline=False)
+                            if channel:
+                                embed = discord.Embed(title=f"{self.guild.name} Submitted a User Report",
+                                                      color=discord.Color(0xeeba2b))
+                                embed.add_field(name="Reported By: ", value=f"{self.reporter_name} ({self.reporter_id})",
+                                                inline=False)
+                                embed.add_field(name="Reported Message: ", value=content_text[:100], inline=False)
+                                embed.add_field(name="User Reported: ", value=f"{self.reportee_name} ({self.reportee_id})",
+                                                inline=False)
+                                embed.add_field(name="Reason: ", value=str(self.reason), inline=False)
 
-                            view = VerifyButton(
-                                self.reporter_id,
-                                self.reportee_id,
-                                self.reason,
-                                content_text,
-                                server,
-                                report_time
-                            )
+                                view = VerifyButton(
+                                    self.reporter_id,
+                                    self.reportee_id,
+                                    self.reason,
+                                    content_text,
+                                    server,
+                                    report_time
+                                )
 
-                            await channel.send(embed=embed, view=view)
+                                await channel.send(embed=embed, view=view)
 
         except Exception as e:
             print(f"Error in report button: {e}")
@@ -384,7 +397,113 @@ class ReportButton(discord.ui.View):
 # region Listeners
 
 
+@bot.event
+async def on_member_join(member):
+    file_path = "reports.csv"
 
+    if not os.path.exists(file_path):
+        return  # No reports file exists yet
+
+    try:
+        df = pd.read_csv(file_path)
+        df["reportee"] = df["reportee"].astype(str)
+
+        # Check if this user has any reports against them
+        user_reports = df[df["reportee"] == str(member.id)]
+
+        if not user_reports.empty:
+            # Get mod channel for this guild
+            mod_channel_id = get_mod_channel_id(member.guild.id)
+
+            if mod_channel_id:
+                channel = bot.get_channel(mod_channel_id)
+
+                if channel:
+                    # Calculate statistics
+                    total_reports = len(user_reports)  # Number of separate times reported
+                    total_agreed = user_reports["agreed"].sum()  # Total agreements across all reports
+                    verified_reports = len(user_reports[user_reports["verified"] == True])
+
+                    # Get unique reporters count
+                    unique_reporters = user_reports["reporter"].nunique()
+
+                    # Get most common reason
+                    most_common_reason = user_reports["reason"].mode()
+                    if not most_common_reason.empty:
+                        most_common_reason = most_common_reason.iloc[0]
+                    else:
+                        most_common_reason = "N/A"
+
+                    # Get most recent report time
+                    most_recent = user_reports["time"].iloc[-1] if "time" in user_reports.columns else "Unknown"
+
+                    # Determine threat level color
+                    if total_reports >= 5 or total_agreed >= 10:
+                        color = discord.Color.dark_red()
+                        threat_level = "🔴 High Risk"
+                    elif total_reports >= 3 or total_agreed >= 5:
+                        color = discord.Color.orange()
+                        threat_level = "🟠 Medium Risk"
+                    else:
+                        color = discord.Color.yellow()
+                        threat_level = "🟡 Low Risk"
+
+                    # Create embed
+                    embed = discord.Embed(
+                        title="⚠️ Reported User Joined Server",
+                        description=f"A user with previous reports has joined **{member.guild.name}**",
+                        color=color
+                    )
+
+                    embed.add_field(name="User", value=f"{member.mention} ({member.name})", inline=False)
+                    embed.add_field(name="User ID", value=f"`{member.id}`", inline=True)
+                    embed.add_field(name="Account Created", value=member.created_at.strftime("%Y-%m-%d"), inline=True)
+                    embed.add_field(name="Threat Level", value=threat_level, inline=True)
+
+                    embed.add_field(name="📊 Report Statistics", value="\u200b", inline=False)
+                    embed.add_field(name="Separate Reports", value=f"**{total_reports}**", inline=True)
+                    embed.add_field(name="Total Agreements", value=f"**{int(total_agreed)}**", inline=True)
+                    embed.add_field(name="Verified Reports", value=f"**{verified_reports}**", inline=True)
+                    embed.add_field(name="Unique Reporters", value=f"**{unique_reporters}**", inline=True)
+
+                    embed.add_field(name="Most Common Reason", value=f"`{most_common_reason}`", inline=False)
+                    embed.add_field(name="Most Recent Report", value=most_recent, inline=False)
+
+                    embed.set_thumbnail(url=member.display_avatar.url)
+                    embed.set_footer(text="Amber Reports Database • Take appropriate action if necessary")
+                    embed.timestamp = datetime.now(timezone.utc)
+
+                    # Get mod role to ping
+                    with open("settings.csv", newline="") as f:
+                        reader = csv.DictReader(f)
+                        mod_role_id = None
+                        for row in reader:
+                            if str(row["guild"]) == str(member.guild.id):
+                                mod_role_id = row.get("mod_role")
+                                break
+
+                    # Send message with optional role ping for high-risk users
+                    if total_reports >= 5 or total_agreed >= 10:
+                        if mod_role_id:
+                            await channel.send(f"<@&{mod_role_id}>", embed=embed)
+                        else:
+                            await channel.send(embed=embed)
+                    else:
+                        await channel.send(embed=embed)
+
+                    print(
+                        f"✅ Alert sent: {member.name} joined {member.guild.name} with {total_reports} separate reports and {int(total_agreed)} total agreements")
+                else:
+                    print(f"❌ Mod channel not found for {member.guild.name}")
+            else:
+                print(f"❌ No mod channel configured for {member.guild.name}")
+        else:
+            print(f"✓ No reports found for {member.name} ({member.id})")
+
+    except Exception as e:
+        print(f"Error in on_member_join: {e}")
+        import traceback
+        traceback.print_exc()
 
 @bot.event
 async def on_ready():
@@ -537,7 +656,8 @@ async def debug(ctx):
 @commands.has_permissions(administrator=True)
 @option("mod_channel", discord.TextChannel, description="Your Mod Channel")
 @option("mod_role", discord.Role, description="Pick a mod role")
-async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChannel, mod_role: discord.Role):
+@option("opt_in", bool, description="Opt in to receive verification notifications")
+async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChannel, mod_role: discord.Role, opt_in: bool):
     try:
         # Create settings.csv if it doesn't exist
         file_path = "settings.csv"
@@ -552,7 +672,8 @@ async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChanne
             data = {
                 "guild": [ctx.guild.id],
                 "mod_channel": [mod_channel.id],
-                "mod_role": [mod_role.id]
+                "mod_role": [mod_role.id],
+                "opt": [opt_in]
             }
             new_row = pd.DataFrame(data)
             df = pd.concat([df, new_row], ignore_index=True)
@@ -562,16 +683,16 @@ async def setup(ctx: discord.ApplicationContext, mod_channel: discord.TextChanne
             # Update existing server
             df.loc[df["guild"] == ctx.guild.id, "mod_channel"] = mod_channel.id
             df.loc[df["guild"] == ctx.guild.id, "mod_role"] = mod_role.id
+            df.loc[df["guild"] == ctx.guild.id, "opt"] = opt_in
             df.to_csv(file_path, index=False)
             await ctx.respond("Settings updated successfully!")
     except Exception as e:
         await ctx.respond(f"An error occurred during setup: {e}")
 # endregion
-
 # region Fun
 
 # endregion
-
+#region Run
 try:
     token = dotenv.get_key(key_to_get='DISCORD_TOKEN', dotenv_path='.env')
     if not token:
@@ -584,3 +705,4 @@ except discord.HTTPException:
     print("Network error occurred.")
 except Exception as e:
     print(f"Unexpected error: {e}")
+#endregion
