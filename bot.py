@@ -237,7 +237,7 @@ class VerifyButton(discord.ui.View):
         self.guild = guild
         self.report_time = report_time  # Add timestamp to identify specific report
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_button")
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, custom_id="verify_button", timeout=500)
     async def button_callback(self, button: discord.ui.Button, interaction: discord.Interaction):
         try:
             button.disabled = True
